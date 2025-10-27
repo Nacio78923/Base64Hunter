@@ -73,4 +73,6 @@ The script flags files if any of the following are true:
 - Reduces noise from large `bstrings` outputs, letting analysts focus on **actionable files**.  
 - Prepares outputs in a **safe, repeatable, and organized** way.
 
+![Image Alt](https://github.com/Nacio78923/Base64Hunter/blob/main/github%20gif.gif)
+
 💬 Author NACIO © 2025 NACIO — All rights reserved.
