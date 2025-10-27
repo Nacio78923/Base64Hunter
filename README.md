@@ -30,16 +30,22 @@ This allows you to **quickly focus on files worth further investigation** withou
 1. Run `bstrings` on the MagnetProcessCapture dump:
 `bstrings.exe -d MagnetProcessCapture-20251027-121245 -s --ls .exe -o C:\SS1\NacioDump.txt`
 
+2. In the next step you need to use this command to export the necessary data to use the next (last script)
+```
+  powershell -Command "iex (iwr https://raw.githubusercontent.com/Nacio78923/Base64Hunter/main/Decoding%20base64.ps1)"
+```
+
 ## Decode Base64 fragments from the dump into a folder, e.g.:
 `C:\SS1\extracted_base64`
+          ^   
+you will create such a file
 
-
+At the very end you use the last script remember to use cd in cmd
 ## Run Base64Hunter on the extracted files:
 ```
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/Nacio78923/Base64Hunter/refs/heads/main/Nacio%20Base%2064%20Hunter.ps1')"
 
 ```
-
 
 
 ## Check the outputs:
