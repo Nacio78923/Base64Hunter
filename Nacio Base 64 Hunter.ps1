@@ -2,8 +2,8 @@
   Nacio BASE64 HUNTER
   Made by Nacio - https://discord.gg/H9aWqxTKJG
 
-  PowerShell: Prepare list of suspicious files for analysis
-  Run in a safe environment (VM/sandbox). Script DOES NOT execute any files.
+ PowerShell: Prepare list of suspicious files for analysis
+ Script DOES NOT execute any files.
 #>
 
 # ASCII banner
@@ -22,53 +22,62 @@ Made by Nacio - https://discord.gg/H9aWqxTKJG
 
 Write-Host $banner
 
+# Automatically prepares extracted_base64 from dump.txt
+# =========================
+
 # === CONFIG ===
+$dumpFile = 'C:\SS1\dump.txt'                   # dump z bstrings/magnet
 $sourceDir = 'C:\SS1\extracted_base64'
 $targetDir = 'C:\SS1\to_analyze'
 $outTxt = 'C:\SS1\analysis_candidates.txt'
 $outCsv = 'C:\SS1\extracted_summary.csv'
 
-# thresholds — edit if needed
-$printableThreshold = 0.6    # >= treated as mostly text (scripts)
-$entropyThreshold = 6.5      # >= treated as high entropy (packed/encrypted)
-$sizeThreshold = 1000        # bytes >= treated as "larger files" (likely binaries/scripts)
+# thresholds
+$printableThreshold = 0.6
+$entropyThreshold = 6.5
+$sizeThreshold = 1000
 
-# helper function to calculate entropy
+# === UTILS ===
 function Get-Entropy([byte[]]$data) {
     if ($null -eq $data -or $data.Length -eq 0) { return 0.0 }
     $counts = @{}
-    foreach ($b in $data) {
-        if ($counts.ContainsKey($b)) { $counts[$b]++ } else { $counts[$b] = 1 }
-    }
+    foreach ($b in $data) { if ($counts.ContainsKey($b)) { $counts[$b]++ } else { $counts[$b] = 1 } }
     $entropy = 0.0
-    foreach ($v in $counts.Values) {
-        $p = [double]$v / $data.Length
-        $entropy -= $p * [Math]::Log($p,2)
-    }
+    foreach ($v in $counts.Values) { $p = [double]$v / $data.Length; $entropy -= $p * [Math]::Log($p,2) }
     return [Math]::Round($entropy,4)
 }
 
-# prepare directories and output files
-if (-not (Test-Path $sourceDir)) {
-    Write-Error "Source directory does not exist: $sourceDir"
+# === PREPARE FOLDERS ===
+if (-not (Test-Path $sourceDir)) { New-Item -ItemType Directory -Path $sourceDir | Out-Null }
+if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir | Out-Null }
+
+# === EXTRACT BASE64 FROM DUMP ===
+if (-not (Test-Path $dumpFile)) {
+    Write-Error "Dump file not found: $dumpFile"
     exit 1
 }
-New-Item -Path $targetDir -ItemType Directory -Force | Out-Null
 
-# clear output files
+# clear previous extracted files
+Get-ChildItem $sourceDir -File | Remove-Item -Force
+
+$dumpContent = Get-Content $dumpFile -Raw
+$matches = [regex]::Matches($dumpContent, '[A-Za-z0-9+/]{40,}={0,2)')
+$i = 0
+foreach ($m in $matches) {
+    $i++
+    $m.Value | Out-File (Join-Path $sourceDir "file_$i.b64") -Encoding ascii
+}
+Write-Output "Extracted $i Base64 sequences to $sourceDir"
+
+# === CLEAR OUTPUT FILES ===
 "" | Out-File $outTxt -Encoding UTF8
 "Name,Length,SHA256,HexStart,IsMZ,PrintableRatio,Entropy,Reason" | Out-File $outCsv -Encoding UTF8
 
-# scan files
+# === SCAN FILES ===
 Get-ChildItem -Path $sourceDir -File | ForEach-Object {
     $file = $_
     $path = $file.FullName
-    try {
-        $bytes = [System.IO.File]::ReadAllBytes($path)
-    } catch {
-        "$($file.Name): Read error: $_" | Out-File $outTxt -Append -Encoding UTF8
-        return
-    }
+    try { $bytes = [System.IO.File]::ReadAllBytes($path) } catch { "$($file.Name): Read error: $_" | Out-File $outTxt -Append -Encoding UTF8; return }
 
     $len = $bytes.Length
     $sha = ""
@@ -80,35 +89,26 @@ Get-ChildItem -Path $sourceDir -File | ForEach-Object {
     $printableRatio = if ($len -gt 0) { [Math]::Round($printableCount / $len,4) } else { 0 }
     $entropy = Get-Entropy $bytes
 
-    # decision rules — suspicious if:
     $reasons = @()
     if ($isMZ) { $reasons += "MZ header (PE exe/dll)" }
     if ($printableRatio -ge $printableThreshold) { $reasons += "High printable ratio ($printableRatio)" }
     if ($entropy -ge $entropyThreshold) { $reasons += "High entropy ($entropy)" }
     if ($len -ge $sizeThreshold) { $reasons += "Size>=$sizeThreshold ($len bytes)" }
 
-    # extra heuristics: search suspicious keywords in readable text
     $susWords = @("Invoke-Expression","IEX","powershell","DownloadString","DownloadFile","rundll32","CreateRemoteThread","WriteProcessMemory","VirtualAllocEx","LoadLibrary","ReflectiveLoader","schtasks","regsvr32","This program cannot be run in DOS mode","CobaltStrike","beacon","meterpreter")
     if ($printableRatio -gt 0.1) {
         $ascii = -join ($bytes | ForEach-Object { if ($_ -ge 32 -and $_ -le 126) { [char]$_ } else { ' ' } })
-        foreach ($w in $susWords) {
-            if ($ascii.IndexOf($w, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                $reasons += "Contains:$w"
-            }
-        }
+        foreach ($w in $susWords) { if ($ascii.IndexOf($w, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $reasons += "Contains:$w" } }
     }
 
     $reasonText = if ($reasons.Count -gt 0) { ($reasons -join "; ") } else { "OK - nothing suspicious by rules" }
 
-    # save summary to CSV
     "$($file.Name),$len,$sha,$hexStart,$isMZ,$printableRatio,$entropy,$reasonText" | Out-File $outCsv -Append -Encoding UTF8
 
-    # if suspicious, copy to analysis folder and write details to TXT
     if ($reasons.Count -gt 0) {
         $dest = Join-Path $targetDir $file.Name
         try { Copy-Item -Path $path -Destination $dest -Force } catch { "$($file.Name): copy error: $_" | Out-File $outTxt -Append -Encoding UTF8 }
 
-        # write details to TXT
         "------------------------------------------------------------" | Out-File $outTxt -Append -Encoding UTF8
         "File: $($file.Name)" | Out-File $outTxt -Append -Encoding UTF8
         "Path: $path" | Out-File $outTxt -Append -Encoding UTF8
@@ -120,7 +120,6 @@ Get-ChildItem -Path $sourceDir -File | ForEach-Object {
         "Entropy: $entropy" | Out-File $outTxt -Append -Encoding UTF8
         "Reasons: $reasonText" | Out-File $outTxt -Append -Encoding UTF8
 
-        # first ASCII strings (max 40)
         if ($printableRatio -gt 0.01) {
             $strings = $ascii -split '\s{2,}' | Where-Object { $_.Length -ge 4 } | Select-Object -Unique -First 40
             "Strings (first matches):" | Out-File $outTxt -Append -Encoding UTF8
@@ -137,4 +136,6 @@ Write-Output "Scanning completed."
 Write-Output "CSV summary: $outCsv"
 Write-Output "Suspicious candidates TXT: $outTxt"
 Write-Output "Copied suspicious files to analysis folder: $targetDir"
+
+
 
