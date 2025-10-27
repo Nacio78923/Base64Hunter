@@ -35,7 +35,10 @@ This allows you to **quickly focus on files worth further investigation** withou
 
 
 ## Run Base64Hunter on the extracted files:
-```powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/Nacio78923/Base64Hunter/refs/heads/main/Nacio%20Base%2064%20Hunter.ps1')"```
+```
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod 'https://raw.githubusercontent.com/Nacio78923/Base64Hunter/refs/heads/main/Nacio%20Base%2064%20Hunter.ps1')"
+
+```
 
 
 
