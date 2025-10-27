@@ -18,7 +18,7 @@ After decoding Base64 fragments from a `bstrings` dump (e.g., `C:\SS1\extracted_
 - Detects **PE headers** (`MZ`) to flag EXE/DLL files.  
 - Identifies **high-entropy** or **mostly-text files** (likely scripts or packed binaries).  
 - Searches for **suspicious keywords**, including PowerShell commands, reflective loaders, cheat terms, and other potential malware indicators.  
-- Automatically copies flagged files to a safe folder (`C:\SS1\to_analyze`) for further analysis in a VM or sandbox.  
+- Automatically copies flagged files to a safe folder (`C:\SS1\to_analyze`) for further analysis.
 - Generates:
   - `extracted_summary.csv` — full per-file metrics, sortable and filterable.  
   - `analysis_candidates.txt` — human-readable report with reasons each file was flagged, plus example strings and hex preview.
